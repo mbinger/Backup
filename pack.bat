@@ -1,5 +1,4 @@
 @echo off
-
 if "%backup_temp%"=="" (
 @echo on
 @echo nothing to do, exit
@@ -14,8 +13,25 @@ if "%folder%"=="merge" (
 :continue_merge
 if "%datestr%"=="" goto date_time_proc
 
+@echo determine the oldest file in the storage
+for /f "delims=;" %%i in ('dir "%backup_storage%\*.zip" /b/a-d/od/t:c') do set last_backup_file=%%i
+echo The most recently created backup file is %last_backup_file%
+
+@echo determine the size of the oldest backup file in the storage
+for %%I in ("%backup_storage%\%last_backup_file%") do set last_backup_size=%%~zI
+
 @echo merge
 7za.exe a -tzip -mx0 "%backup_storage%\%datestr%.zip" "%backup_temp%\*.*"
+
+for %%I in ("%backup_storage%\%datestr%.zip") do set actual_backup_size=%%~zI
+
+@echo last backup file "%backup_storage%\%last_backup_file%" has size "%last_backup_size%" bytes
+@echo actual backup file "%backup_storage%\%datestr%.zip" has size "%actual_backup_size%" bytes
+
+if "%last_backup_size%"=="%actual_backup_size%" if "%backup_storage%\%last_backup_file%" NEQ "%backup_storage%\%datestr%.zip"  (
+  @echo actual backup file "%backup_storage%\%datestr%.zip" seems to have same content to last backup file "%backup_storage%\%last_backup_file%", delete
+  del "%backup_storage%\%datestr%.zip"
+)
 
 @echo clean-up temp
 del "%backup_temp%\*.zip"
