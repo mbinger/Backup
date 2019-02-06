@@ -4,6 +4,7 @@ SET backup_storage=e:\backup\cloud\YandexDisk\!backups
 SET storage_days=30
 SET maximal_file_size_mb=100
 SET ignore_extensions=exe;dll;msc
+SET log=on
 @echo on
 
 call pack prepare
