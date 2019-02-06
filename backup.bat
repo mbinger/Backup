@@ -2,7 +2,11 @@
 SET backup_temp=e:\backup\temp
 SET backup_storage=e:\backup\cloud\YandexDisk\!backups
 SET storage_days=30
+SET maximal_file_size_mb=100
+SET ignore_extensions=exe;dll;msc
 @echo on
+
+call pack prepare
 
 call pack c:\Users\user\Desktop
 call pack c:\Users\user\Documents

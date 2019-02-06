@@ -13,13 +13,29 @@ exit
 set folder=%1
 
 rem **************************************************************************************************************************************
+rem ************************************************************ MODE prepare ************************************************************
+rem **************************************************************************************************************************************
+
+if "%folder%"=="prepare" (
+
+rem clean-up temp
+if exist "%backup_temp%\copy" rd /s /q "%backup_temp%\copy"
+if exist "%backup_temp%\merge" rd /s /q "%backup_temp%\merge"
+goto :eof
+)
+
+rem **************************************************************************************************************************************
 rem ************************************************************* MODE merge *************************************************************
 rem **************************************************************************************************************************************
 
 if "%folder%"=="merge" (
 
-rem call procedure date_time_proc to format current date and time, save result into variable %datestr% and return to label :continue_merge
-:continue_merge
+rem call procedure delete_ignored_files_proc to delete ignored files, fill variable %maximal_file_size_bytes% and return to label :continue_merge_1
+:continue_merge_1
+if "%maximal_file_size_bytes%"=="" goto delete_ignored_files_proc
+
+rem call procedure date_time_proc to format current date and time, save result into variable %datestr% and return to label :continue_merge_2
+:continue_merge_2
 if "%datestr%"=="" goto date_time_proc
 
 rem determine the most recently created (newest) .zip file in the storage
@@ -52,8 +68,8 @@ if "%last_backup_size%" NEQ "%actual_backup_size%" (
 )
 
 rem clean-up temp
-rd /s /q "%backup_temp%\copy"
-rd /s /q "%backup_temp%\merge"
+if exist "%backup_temp%\copy" rd /s /q "%backup_temp%\copy"
+if exist "%backup_temp%\merge" rd /s /q "%backup_temp%\merge"
 
 goto :eof
 )
@@ -65,10 +81,9 @@ rem ****************************************************************************
 if "%folder%"=="cleanup" (
 @echo clean-up storage
 
-rem delete backups older than %storage_days%
+@echo delete backups older than %storage_days% days
 @echo on
-FORFILES /P %backup_storage% /D -%storage_days% /M *.zip /C "cmd /c echo delete @path"
-FORFILES /P %backup_storage% /D -%storage_days% /M *.zip /C "cmd /c del @path"
+FORFILES /P %backup_storage% /D -%storage_days% /M *.zip /C "cmd /c del @path /f /q"
 @echo off
 
 goto :eof
@@ -94,6 +109,36 @@ xcopy "%folder%" "%backup_temp%\copy\%archivename%" /s /e /q /h /r /c
 goto :eof
 
 rem **************************************************************************************************************************************
+rem ************************************ PROCEDURE delete files with ignored extensions and huge size ************************************
+rem **************************************************************************************************************************************
+
+:delete_ignored_files_proc
+
+set /a maximal_file_size_bytes=maximal_file_size_mb*1024*1024
+
+rem enumerate all files and folders in temp\copy
+for /f "delims=;" %%i in ('dir /s/b "%backup_temp%\copy\*.*"') do (
+	rem check the path is a file
+	if not exist "%%i\*" (
+		
+		if %%~zi gtr %maximal_file_size_bytes% ( 
+			@echo skip "%%i" because its size "%%~zi" is too large
+			del "%%i" /f /q
+		)
+
+		rem enumerate all ignored extensions
+		for %%e in (%ignore_extensions%) do (
+			if "%%~xi"==".%%e" (
+				@echo skip "%%i" because its extension is ignored
+				del "%%i" /f /q
+			)
+		)
+	)
+)
+
+goto continue_merge_1
+
+rem **************************************************************************************************************************************
 rem ********************************* PROCEDURE format current date time with pattern "yyyy_mm_dd hh_mm" *********************************
 rem **************************************************************************************************************************************
          
@@ -110,6 +155,6 @@ for /f "tokens=1-2 delims=: " %%i in ("%time%") do (
 )
 set datestr=%year%_%month%_%day% %hour%_%minute%
 
-goto continue_merge
+goto continue_merge_2
 
 
