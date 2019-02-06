@@ -23,29 +23,37 @@ rem call procedure date_time_proc to format current date and time, save result i
 if "%datestr%"=="" goto date_time_proc
 
 rem determine the most recently created (newest) .zip file in the storage
-for /f "delims=;" %%i in ('dir "%backup_storage%\*.zip" /b/a-d/od/t:c') do set last_backup_file=%%i
+for /f "delims=;" %%i in ('dir "%backup_storage%\*.zip" /b/a-d/od/t:c') do set last_backup_file=%backup_storage%\%%i
 echo The most recently created backup file is %last_backup_file%
 
 rem determine size in bytes of the most recently created backup file in the storage
-for %%I in ("%backup_storage%\%last_backup_file%") do set last_backup_size=%%~zI
+for %%I in ("%last_backup_file%") do set last_backup_size=%%~zI
+
+rem create folder temp\merge
+if not exist "%backup_temp%\merge" mkdir "%backup_temp%\merge"
 
 rem merge created archives from temp folder into storage folder
-7za.exe a -tzip -mx0 "%backup_storage%\%datestr%.zip" "%backup_temp%\*.*"
+set actual_backup_file=%backup_temp%\merge\%datestr%.zip
+7za.exe a -tzip -mx0 "%actual_backup_file%" "%backup_temp%\pack\*.zip"
 
 rem determine size in bytes of the newly merged backup
-for %%I in ("%backup_storage%\%datestr%.zip") do set actual_backup_size=%%~zI
+for %%I in ("%actual_backup_file%") do set actual_backup_size=%%~zI
 
-@echo last backup file "%backup_storage%\%last_backup_file%" has size "%last_backup_size%" bytes
-@echo actual backup file "%backup_storage%\%datestr%.zip" has size "%actual_backup_size%" bytes
+@echo last backup file "%last_backup_file%" has size "%last_backup_size%" bytes
+@echo actual backup file "%actual_backup_file%" has size "%actual_backup_size%" bytes
 
-rem check if the size of newly created backup not differs from the size of most recently backup OR this is the same file (first backup ever)
-if "%last_backup_size%"=="%actual_backup_size%" if "%backup_storage%\%last_backup_file%" NEQ "%backup_storage%\%datestr%.zip"  (
-  @echo actual backup file "%backup_storage%\%datestr%.zip" seems to have same content to last backup file "%backup_storage%\%last_backup_file%", delete
-  del "%backup_storage%\%datestr%.zip"
+rem check if the size of newly created backup differs from the size of most recently backup
+
+if "%last_backup_size%" NEQ "%actual_backup_size%" (
+  @echo move actual backup file "%actual_backup_file%" to storage folder %backup_storage%
+  move "%actual_backup_file%" "%backup_storage%"
+) else (
+  @echo actual backup file "%actual_backup_file%" seems to have same content to last backup file "%last_backup_file%", skip
 )
 
 rem clean-up temp
-del "%backup_temp%\*.zip"
+rd /s /q "%backup_temp%\pack"
+rd /s /q "%backup_temp%\merge"
 
 goto :eof
 )
@@ -77,10 +85,14 @@ set archivename=%archivename:$=_%
 set archivename=%archivename::=_%
 
 rem pack folder into temp folder
+
+rem create folder temp\pack
+if not exist "%backup_temp%\pack" mkdir "%backup_temp%\pack"
+
 @echo on
 @echo pack
 
-7za.exe a -tzip -mx0 "%backup_temp%\%archivename%.zip" "%folder%"
+7za.exe a -tzip -mx0 "%backup_temp%\pack\%archivename%.zip" "%folder%"
 
 @echo off
 goto :eof
