@@ -34,7 +34,7 @@ if not exist "%backup_temp%\merge" mkdir "%backup_temp%\merge"
 
 rem merge created archives from temp folder into storage folder
 set actual_backup_file=%backup_temp%\merge\%datestr%.zip
-7za.exe a -tzip -mx0 "%actual_backup_file%" "%backup_temp%\pack\*.zip"
+7za.exe a -tzip "%actual_backup_file%" "%backup_temp%\copy\*"
 
 rem determine size in bytes of the newly merged backup
 for %%I in ("%actual_backup_file%") do set actual_backup_size=%%~zI
@@ -52,7 +52,7 @@ if "%last_backup_size%" NEQ "%actual_backup_size%" (
 )
 
 rem clean-up temp
-rd /s /q "%backup_temp%\pack"
+rd /s /q "%backup_temp%\copy"
 rd /s /q "%backup_temp%\merge"
 
 goto :eof
@@ -84,17 +84,13 @@ set archivename=%archivename:.=_%
 set archivename=%archivename:$=_%
 set archivename=%archivename::=_%
 
-rem pack folder into temp folder
+if not exist "%backup_temp%\copy" mkdir "%backup_temp%\copy"
+if not exist "%backup_temp%\copy\%archivename%" mkdir "%backup_temp%\copy\%archivename%"
 
-rem create folder temp\pack
-if not exist "%backup_temp%\pack" mkdir "%backup_temp%\pack"
+rem recursively copy sorce folder into temp\copy
 
-@echo on
-@echo pack
+xcopy "%folder%" "%backup_temp%\copy\%archivename%" /s /e /q /h /r /c 
 
-7za.exe a -tzip -mx0 "%backup_temp%\pack\%archivename%.zip" "%folder%"
-
-@echo off
 goto :eof
 
 rem **************************************************************************************************************************************
