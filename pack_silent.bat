@@ -18,6 +18,10 @@ rem ****************************************************************************
 
 if "%folder%"=="prepare" (
 
+rem check if 7za exists
+:continue_prepare
+if "%check_7za%"=="" goto check_7za
+
 rem clean-up temp
 if exist "%backup_temp%\copy" rd /s /q "%backup_temp%\copy"
 if exist "%backup_temp%\merge" rd /s /q "%backup_temp%\merge"
@@ -55,8 +59,14 @@ if not exist "%backup_temp%\merge" mkdir "%backup_temp%\merge"
 rem merge created archives from temp folder into storage folder
 
 set actual_backup_file=%backup_temp%\merge\%datestr%.zip
-@echo pack files into %actual_backup_file% 
-7za.exe a -tzip "%actual_backup_file%" "%backup_temp%\copy\*"
+
+if "%password%"=="" (
+	@echo pack files into %actual_backup_file% without password
+	7za.exe a -tzip "%actual_backup_file%" "%backup_temp%\copy\*"
+) else (
+	@echo pack files into %actual_backup_file% using password
+	7za.exe a -tzip -p%password% "%actual_backup_file%" "%backup_temp%\copy\*"
+)
 
 rem determine size in bytes of the newly merged backup
 for %%I in ("%actual_backup_file%") do set actual_backup_size=%%~zI
@@ -164,4 +174,18 @@ set datestr=%year%_%month%_%day% %hour%_%minute%
 
 goto continue_merge_2
 
+rem **************************************************************************************************************************************
+rem ************************************************* PROCEDURE check 7za ****************************************************************
+rem **************************************************************************************************************************************
+         
+:check_7za
 
+set check_7za="true" 
+
+if not exist "7za.exe" (
+ @echo ERROR: 7za.exe not found
+ @echo please download console version from https://www.7-zip.org/ and place it into this folder
+ exit
+)
+
+goto continue_prepare
