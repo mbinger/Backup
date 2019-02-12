@@ -20,6 +20,8 @@ $log = $true
 #set encryption password or empty string to ignore encryption
 $password = ""
 
+.\pack.ps1 -target "prepare"
+
 #TODO: add your folders to the backup here
 
 .\pack.ps1 -target "c:\Users\user\Desktop"
