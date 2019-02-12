@@ -16,8 +16,8 @@ $sevenZip = "7za.exe"
 
 function check {
 	if ([string]::IsNullOrEmpty($target)) {
-		write-host "nothing to do, exit"
-		exit 1
+		write-warning "Run backup.ps1 to start the backup"
+		Exit 1
 	}
 }
 
@@ -25,7 +25,7 @@ function check {
 ########################################################################### Prepare ##########################################################################
 
 function prepare {
-	write-host "prepare"
+	write-host "Prepare"
 
 	if(!(test-path -Path $backup_temp_copy)) {
 		new-item -ItemType directory -Path $backup_temp_copy
@@ -44,10 +44,10 @@ function prepare {
 ######################################################################### Merge backup #######################################################################
 
 function merge {
-	write-host "merge"
+	write-host "Merge"
 	prepare
 	
-	#@@@ deleteIgnoredFiles $backup_temp_copy
+	deleteIgnoredFiles $backup_temp_copy
 	
 	#determine last backup file
 	$last_backup_file = getMostActualBackupFile $backup_storage
@@ -55,21 +55,41 @@ function merge {
 
 	if ($last_backup_file){
 		$last_backup_size = $last_backup_file.Length
-		write-host Last backup file is $last_backup_file.FullName with size $last_backup_size bytes
+		write-host "Last backup file is ""$last_backup_file"" with size $last_backup_size bytes"
 	}
-	
+
 	$new_backup_file = createArchive $backup_temp_copy $backup_temp_merge $password
 	if (!$new_backup_file) {
-		write-host "Unable to create backup archive"
-		Exit 1
+		write-error "The backup archive is not created"
+		return
 	}
-	write-host $new_backup_file
+	
+	$new_backup_size = $new_backup_file.Length
+	write-host "New backup file is ""$new_backup_file"" with size $new_backup_size bytes"
+	
+	if ($new_backup_size -eq $last_backup_size) {
+		write-host "New backup file ""$new_backup_file"" seems to have same content to last backup file ""$last_backup_file"", skip and delete"
+		remove-item $new_backup_file.FullName -Force
+	}else {
+		write-host "Move new backup file ""$new_backup_file"" to backup storage ""$backup_storage"""
+		move-item -Path $new_backup_file.FullName -Destination $backup_storage -Force
+	}
+}
+
+####################################################################### Clean-up temp ########################################################################
+
+function cleanupTemp {
+	write-host "Clean-up temp $backup_temp_copy" 
+	remove-item -Path $backup_temp_copy -Recurse -Force
+	
+	write-host "Clean-up temp $backup_temp_merge" 
+	remove-item -Path $backup_temp_merge -Recurse -Force
 }
 
 ##################################################################### Add folder to backup ###################################################################
 
 function addFolderToBackup([String] $path) {
-	write-host "pack " $path
+	write-host "Add ""$path"" to backup"
 	prepare
 	
 	$archiveName = removeInvalidFileNameChars $path
@@ -105,16 +125,16 @@ function deleteIgnoredFiles([String] $path) {
         else 
         { 
 			if ($item.Length -ge $maximal_file_size_bytes) {
-				write-host skip and delete $item.FullName because its size $($item.Length / 1024 / 1024) MB greater than maximal allowed $maximal_file_size_mb MB
-				remove-item $item.FullName
+				write-host "Skip and delete ""$item"" because its size $($item.Length / 1024 / 1024) MB greater than maximal allowed $maximal_file_size_mb MB"
+				remove-item $item.FullName -Force
 				continue
 			}
 			
 			$extension = [System.IO.Path]::GetExtension($item.FullName) -replace "\."
 			foreach ($i in $ignore_extensions) {
 				if ($extension -eq $i) {
-					write-host skip and delete $item.FullName because of ignored extension $extension
-					remove-item $item.FullName
+					write-host "Skip and delete ""$item"" because of ignored extension ""$extension"""
+					remove-item $item.FullName -Force
 					break
 				}
 			}
@@ -158,21 +178,32 @@ function getMostActualBackupFile([String] $path) {
 #################################################################### Create archive ############################################################
 function createArchive([String] $sourceFolderPath, [String] $destinationFolderPath, [String] $password) {
 	
-	$datestr = $(get-date).ToString("yyyy-MM-dd hhmmss")
-	
 	$filesToZip = $([io.path]::combine($sourceFolderPath, "*"))
 	
+	if(!(test-path -Path $filesToZip)) {
+		write-error "Folder ""$filesToZip"" is empty
+Add some folders to backup in backup.ps like
+.\pack.ps1 -target ""c:\Users\user\Desktop""
+Before call merge"
+		return $null
+	}
+		
+	$datestr = $(get-date).ToString("yyyy-MM-dd hhmmss")
+		
 	if ([string]::IsNullOrEmpty($password)) {
 		#create ZIP archive without password
 		$new_backup_filename = [io.path]::combine($destinationFolderPath, $datestr+"."+$backup_format_zip)
+		
+		write-host "Pack ""$filesToZip"" into ""$new_backup_filename"" using internal archive tool"
+		
 		Compress-Archive -path $filesToZip -destinationpath $new_backup_filename -force
 		return $(Get-Item $new_backup_filename)
 	} else {
 		#create 7za archive with password
 		
 		if (-not $(Test-Path ($sevenZip))) {
-			write-warning "$sevenZip not found"
-			write-warning "please download console version from https://www.7-zip.org/ and place it into $PSScriptRoot to be able to create password protected backups"
+			write-warning "$sevenZip not found
+please download console version from https://www.7-zip.org/ and place it into $PSScriptRoot to be able to create password protected backups"
 			
 			return createArchive $sourceFolderPath $destinationFolderPath $null
 		}
@@ -182,10 +213,42 @@ function createArchive([String] $sourceFolderPath, [String] $destinationFolderPa
 		$arguments = "a ""$new_backup_filename"" ""$filesToZip"" -p$password -mhe=on"
 		$windowStyle = "hidden"
 	
+		write-host "Pack ""$filesToZip"" into ""$new_backup_filename"" using $sevenZip"
 		$p = Start-Process $sevenZip -ArgumentList $arguments -Wait -PassThru -WindowStyle $windowStyle
 		
 		return $(Get-Item $new_backup_filename)
 	}
+}
+
+######################################################################## Clean-up storage ####################################################################
+function cleanUpStorage {
+	write-host "Clean-up storage"
+	
+	$now = $(get-date)
+
+	foreach ($item in Get-ChildItem $backup_storage)
+    {
+		if (!($item.PSIsContainer)) {
+			$extension = [System.IO.Path]::GetExtension($item.FullName) -replace "\."
+			foreach ($i in $backup_extensions) {
+				if ($extension -eq $i) {
+
+					$difference = new-timespan -start $item.LastWriteTime -end $now
+					$differenceDays = $difference.TotalDays
+					
+					if ($differenceDays -ge $storage_days) {
+					
+						write-host "Backup ""$item"" created $differenceDays days before will be deleted as expired"
+						remove-item $item.FullName -Force
+					}
+			
+					break
+				}
+			}
+		
+		}
+    } 	
+	
 }
 
 ##############################################################################################################################################################
@@ -196,6 +259,10 @@ check
 
 if ($target -eq "merge") {
 	merge
+	cleanupTemp
+	cleanUpStorage
 }else {
 	addFolderToBackup $target
 }
+
+write-host "Done"
